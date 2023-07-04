@@ -1,0 +1,879 @@
+<form script="as_data:tabs.js,tokens.js" theme="dark">
+  <label>Scalability</label>
+  <init>
+    <set token="iGroup"></set>
+  </init>
+  <search id="set_user">
+    <query>
+       | makeresults
+       | eval userId="$env:user$"
+     </query>
+    <done>
+      <set token="userId">$result.userId$</set>
+    </done>
+  </search>
+  <search id="set_company">
+    <query>
+       | inputlookup kvstore_companies where cpyKey="$cpyKey$"
+     </query>
+    <done>
+      <set token="defaultCpyName">$result.cpyName$</set>
+    </done>
+  </search>
+  <!-- In the past had to use the userId from the above makeresutls ? -->
+  <search id="get_customer">
+    <query>
+       | inputlookup kvstore_last where key="cpyKey"
+       | search user="$userId$"
+       | fields value _key
+     </query>
+    <done>
+      <condition match="'job.resultCount' != 0">
+        <set token="cpyKey">$result.value$</set>
+        <set token="cpyKey_key">$result._key$</set>
+      </condition>
+    </done>
+  </search>
+  <search id="get_group">
+    <query>
+       | inputlookup kvstore_last where key="groupId"
+       | search user="$userId$"
+       | fields value _key
+     </query>
+    <done>
+      <condition match="'job.resultCount' != 0">
+        <set token="groupId">$result.value$</set>
+        <set token="groupId_key">$result._key$</set>
+      </condition>
+    </done>
+  </search>
+  <search id="update_last_cpyKey" depends="$cpyKey_key$,$iCompany$">
+    <query>
+      | makeresults
+      | eval value="$iCompany$", key="cpyKey", user="$userId$", _key="$cpyKey_key$"
+      | outputlookup kvstore_last append=True
+    </query>
+  </search>
+  <search id="create_last_cpyKey" rejects="$cpyKey_key$" depends="$iCompany$">
+    <query>
+      | makeresults
+      | eval value="$iCompany$", key="cpyKey", user="$userId$"
+      | outputlookup kvstore_last append=True
+    </query>
+  </search>
+  <search id="create_last_groupId" rejects="$groupId_key$" depends="$iGroup$">
+    <query>
+      | makeresults
+      | eval value="$fGroup$", key="groupId", user="$userId$"
+      | outputlookup kvstore_last append=True
+    </query>
+  </search>
+  <search id="update_last_groupId" depends="$groupId_key$,$iCompany$">
+    <query>
+      | makeresults
+      | eval value="$fGroup$", key="groupId", user="$userId$", _key="$groupId_key$"
+      | outputlookup kvstore_last append=True
+    </query>
+  </search>
+  <fieldset submitButton="false">
+    <input type="time" token="global_time" searchWhenChanged="true">
+      <label>Select Time Range</label>
+      <default>
+        <earliest>-7d@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="iCompany" searchWhenChanged="true">
+      <label>Company</label>
+      <fieldForLabel>cpyName</fieldForLabel>
+      <fieldForValue>cpyKey</fieldForValue>
+      <search>
+        <query>| inputlookup kvstore_companies | fields cpyKey cpyName theater
+| dedup cpyKey,cpyName | table cpyKey,cpyName
+| sort cpyName</query>t<earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </search>
+      <default>$cpyKey$</default>
+      <initialValue>$cpyKey$</initialValue>
+    </input>
+    <input type="dropdown" token="iGroup" searchWhenChanged="true">
+      <label>Group</label>
+      <fieldForLabel>name_id</fieldForLabel>
+      <fieldForValue>groupId</fieldForValue>
+      <search>
+        <query>|  tstats count where index="$iCompany$-np" sourcetype::groups earliest=-4d@d by groupId, groupName
+| eval name_id = groupName+" ("+groupId+")"
+| fields name_id groupId
+| sort name_id</query>
+        <earliest>-30d@d</earliest>
+        <latest>now</latest>
+      </search>
+      <change>
+        <condition match=" isnull( $value$ ) ">
+          <set token="iGroup"></set>
+        </condition>
+        <condition>
+          <set token="iGroup">OR (index="$iCompany$-np" sourcetype::group_members groupId=$value$)</set>
+          <set token="xGroup">| eval groupId=$value$ | lookup local=true $iCompany$-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)</set>
+          <set token="fGroup">$value$</set>
+        </condition>
+      </change>
+      <choice value="&quot;*&quot;">All</choice>
+      <default>"*"</default>
+      <initialValue>"*"</initialValue>
+    </input>
+    <html>
+      <p>
+         <strong>Reference </strong>
+        <a href="">CXtools Estore</a>  <br/>
+        <a href="">Documentation (sign-in to Github )</a>
+      </p>
+    </html>
+  </fieldset>
+  <row depends="$form.debug$">
+    <panel>
+      <html>
+        <code>
+          env:user $env:user$<br/>
+          userId: $userId$<br/>
+          cpyKey: $cpyKey$<br/>
+          cpyKey_key: $cpyKey_key$<br/>
+          iGroup: $iGroup$<br/>
+          fGroup: $fGroup$<br/>
+          groupId: $groupId$<br/>
+          groupId_key: $groupId_key$<br/>
+          iCompany: $iCompany$<br/>
+          iCustomer: $iCustomer$<br/>
+          defaultCpyName: $defaultCpyName$<br/>
+        </code>
+      </html>
+    </panel>
+  </row>
+  <row id="debug" depends="$form.debug$">
+    <panel>
+      <html>
+        <code>
+          iGroup: $iGroup$<br/>
+          xGroup: $xGroup$
+        </code>
+      </html>
+      <html>
+      <p>
+         <strong>Reference </strong>
+       <a target="_blank" href="">Documentation (Wiki)</a>
+      </p>
+    </html>
+    </panel>
+  </row>
+  <row id="Reference">
+    <panel>
+      <html>
+      </html>
+      <html>
+      <p>
+         <strong>Reference </strong>
+       <a target="_blank" href="">Documentation (Wiki)</a>
+      </p>
+    </html>
+    </panel>
+  </row>
+  <row id="scalability_1">
+    <panel>
+      <title>TCAM Usage Percentage Utilization</title>
+      <input type="text" token="filter_policy_usage_threshold" searchWhenChanged="true">
+        <label>Enter Threshold</label>
+        <default>3</default>
+        <initialValue>50</initialValue>
+      </input>
+      <single>
+        <title>Value In Percentage</title>
+        <search>
+          <query>| tstats count where (index::363636-cli sourcetype::eqptcapacityPolUsage5min ) by sourcetype deviceId pod node dn polUsageCum polUsageCapCum source _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| eventstats sum(polUsageCum) as TotalPolUsageCum, sum(polUsageCapCum) as TotalPolUsageCapCum
+| eval percent_utilization = round( (polUsageCum / polUsageCapCum)*100 , 1)
+| eval Total_Percent_Utilization = round ( (TotalPolUsageCum/TotalPolUsageCapCum) * 100, 1)
+| eval Violation = if (Total_Percent_Utilization &lt; $filter_policy_usage_threshold$ AND percent_utilization &lt; $filter_policy_usage_threshold$, Total_Percent_Utilization, percent_utilization)
+| stats max(Violation) as Value
+| table Value</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="numberPrecision">0.0</option>
+        <option name="rangeColors">["0x53a051","0xdc4e41"]</option>
+        <option name="rangeValues">[$filter_policy_usage_threshold$]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+        <drilldown>
+          <set token="show_policy_usage_util_details">true</set>
+          <unset token="show_vlan_usage_util_details"></unset>
+          <unset token="show_l2_usage_util_details"></unset>
+          <unset token="show_l3_usage_util_details"></unset>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title>VLAN Usage Percentage Utilization</title>
+      <input type="text" token="filter_vlan_usage_threshold" searchWhenChanged="true">
+        <label>Enter Threshold</label>
+        <default>80</default>
+        <initialValue>50</initialValue>
+      </input>
+      <single>
+        <title>Value In Percentage</title>
+        <search>
+          <query>| tstats count where (index::363636-cli sourcetype::eqptcapacityVlanUsage5min) by sourcetype deviceId pod node dn totalCum totalCapCum _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| eventstats sum(totalCum) as GrandTotalCum, sum(totalCapCum) as GrandTotalCapCum
+| eval percent_utilization = round ( (totalCum/ totalCapCum) * 100, 1)
+| eval Total_Percent_Utilization = round ( (GrandTotalCum / GrandTotalCapCum ) * 100, 1 )
+| eval Violation = if (Total_Percent_Utilization &lt; $filter_vlan_usage_threshold$ AND percent_utilization &lt; $filter_vlan_usage_threshold$, Total_Percent_Utilization, percent_utilization)
+| stats max(Violation) as value
+| table value</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="numberPrecision">0.0</option>
+        <option name="rangeColors">["0x53a051","0xdc4e41"]</option>
+        <option name="rangeValues">[$filter_vlan_usage_threshold$]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+        <drilldown>
+          <unset token="show_policy_usage_util_details"></unset>
+          <set token="show_vlan_usage_util_details">true</set>
+          <unset token="show_l2_usage_util_details"></unset>
+          <unset token="show_l3_usage_util_details"></unset>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title>MAC Usage Percentage Utilization</title>
+      <input type="text" token="filter_l2_usage_threshold" searchWhenChanged="true">
+        <label>Enter Threshold</label>
+        <default>70</default>
+        <initialValue>50</initialValue>
+      </input>
+      <single>
+        <title>Value In Percentage</title>
+        <search>
+          <query>| tstats count where (index::363636-cli sourcetype::eqptcapacityL2Usage5min OR sourcetype::eqptcapacityL2TotalUsage5min) by sourcetype deviceId pod node dn localEpLast localEpCapTrBase _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| eventstats sum(localEpLast) as TotalLocalEpLast, sum(localEpCapTrBase) as TotalLocalEpCapTrBase
+| eval percent_utilization = round ( ( localEpLast / localEpCapTrBase ) * 100, 1)
+| eval Total_Percent_Utilization = round ( ( TotalLocalEpLast / TotalLocalEpCapTrBase ) * 100, 1)
+| eval Violation = if ( Total_Percent_Utilization &lt; $filter_l2_usage_threshold$ AND percent_utilization &lt; $filter_l2_usage_threshold$, Total_Percent_Utilization, percent_utilization)
+| stats max(Violation) as Value
+| table Value</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="numberPrecision">0.0</option>
+        <option name="rangeColors">["0x53a051","0xdc4e41"]</option>
+        <option name="rangeValues">[$filter_l2_usage_threshold$]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+        <drilldown>
+          <unset token="show_policy_usage_util_details"></unset>
+          <unset token="show_vlan_usage_util_details"></unset>
+          <set token="show_l2_usage_util_details">true</set>
+          <unset token="show_l3_usage_util_details"></unset>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title>L3 Usage Percentage Utilization</title>
+      <input type="text" token="filter_l3_usage_threshold" searchWhenChanged="true">
+        <label>Enter Threshold</label>
+        <default>70</default>
+        <initialValue>50</initialValue>
+      </input>
+      <single>
+        <title>Value In Percentage</title>
+        <search>
+          <query>(index::363636-cli sourcetype::eqptcapacityL3Usage5min OR sourcetype::eqptcapacityL3TotalUsageCap5min) 
+| fields sourcetype deviceId pod node dn v4LocalEpMax v4TotalEpCapLast name _time 
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| stats values(v4LocalEpMax) as v4LocalEpMax, values(v4TotalEpCapLast) as v4TotalEpCapLast, by _time groupId node
+| eventstats sum(v4LocalEpMax) as Totalv4LocalEpMax
+| eval percent_utilization = round ((v4LocalEpMax*100)/v4TotalEpCapLast, 1)
+| eval Total_Percent_utilization = round ( (Totalv4LocalEpMax / v4TotalEpCapLast)*100, 1)
+| eval Violation = if ( Total_Percent_Utilization &lt; $filter_l3_usage_threshold$ AND percent_utilization &lt; filter_l3_usage_threshold, Total_Percent_Utilization, percent_utilization)
+| stats max(Violation) as Value
+| table Value</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="numberPrecision">0.0</option>
+        <option name="rangeColors">["0x53a051","0xdc4e41"]</option>
+        <option name="rangeValues">[$filter_l3_usage_threshold$]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+        <drilldown>
+          <unset token="show_policy_usage_util_details"></unset>
+          <unset token="show_vlan_usage_util_details"></unset>
+          <unset token="show_l2_usage_util_details"></unset>
+          <set token="show_l3_usage_util_details">true</set>
+        </drilldown>
+      </single>
+    </panel>
+  </row>
+  <row id="scalability_1_details">
+    <panel depends="$show_policy_usage_util_details$">
+      <title>TCAM Usage Percentage Utilization Details</title>
+      <table>
+        <search>
+          <query>| tstats count where (index::$iCompany$-cli sourcetype::eqptcapacityPolUsage5min ) by sourcetype deviceId pod node dn polUsageCum polUsageCapCum source _time 
+$xGroup$ 
+| lookup local=t $iCompany$-device_details.csv deviceId OUTPUT deviceName 
+| eval deviceName = mvdedup(deviceName) 
+| stats values(*) as * by deviceId, _time 
+| eval percent_utilization = round( (polUsageCum / polUsageCapCum)*100 , 1) 
+| eval violation = if ( percent_utilization &gt; $filter_policy_usage_threshold$, "Non-Compliant","Compliant" ) 
+| rename deviceName AS hostname
+| table hostname pod node percent_utilization polUsageCum polUsageCapCum _time 
+| sort - percent_utilization</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel depends="$show_vlan_usage_util_details$">
+      <title>VLAN Usage Percentage Utilization Details</title>
+      <table>
+        <search>
+          <query>| tstats count where (index::363636-cli sourcetype::eqptcapacityVlanUsage5min ) by sourcetype deviceId pod node dn totalCum totalCapCum _time
+| eval groupId=666666 | lookup local=t 363636-device_details.csv deviceId OUTPUT deviceName
+| stats values(*) as * by deviceId, _time
+| eval percent_utilization = round ( (totalCum/totalCapCum) * 100, 1)
+| eval violation = if ( percent_utilization &gt; $filter_vlan_usage_threshold$, "Non-Compliant", "Compliant")
+| rename deviceName AS hostname
+| table hostname pod node percent_utilization totalCum totalCapCum _time
+| sort 0 -percent_utilization</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel depends="$show_l2_usage_util_details$">
+      <title>MAC Usage Percenttage Utilization Details</title>
+      <table>
+        <search>
+          <query>| tstats count where (index::363636-cli sourcetype::eqptcapacityL2Usage5min OR sourcetype::eqptcapacityL2TotalUsage5min) by sourcetype deviceId pod node dn localEpLast localEpCapTrBase _time 
+| eval groupId=666666 | lookup local=t 363636-device_details.csv deviceId OUTPUT deviceName
+| stats values(*) as * by deviceId, _time
+| eval percent_utilization = round( (localEpLast / localEpCapTrBase ) * 100 , 1)
+| eval violation = if ( percent_utilization &gt; $filter_vlan_usage_threshold$, "Non-Compliant", "Compliant")
+| rename deviceName AS hostname
+| table hostname pod node percent_utilization localEpLast localEpCapTrBase _time
+| sort 0 -percent_utilization</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel depends="$show_l3_usage_util_details$">
+      <title>L3 Usage Percenttage Utilization details</title>
+      <table>
+        <search>
+          <query>(index::363636-cli sourcetype::eqptcapacityL3Usage5min OR sourcetype::eqptcapacityL3TotalUsageCap5min) 
+| fields sourcetype deviceId pod node dn v4LocalEpMax v4TotalEpCapLast name _time 
+| eval groupId=666666 | lookup local=t 363636-device_details.csv deviceId OUTPUT deviceName
+| stats values(v4LocalEpMax) as v4LocalEpMax values(v4TotalEpCapLast) as v4TotalEpCapLast by deviceName _time groupId pod node
+| eval percent_utilization = round( ( v4LocalEpMax * 100 ) / v4TotalEpCapLast, 1)
+| eval Violation = if ( percent_utilization &gt; $filter_l3_usage_threshold$, "Non-Compliant", "Compliant")
+| rename deviceName as hostname
+| table hostname pod node percent_utilization v4LocalEpMax v4TotalEpCapLast _time
+| sort 0 -percent_utilization</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+  <row id="scalability_2">
+    <panel>
+      <title>Total EPG Fabric Wide</title>
+      <chart>
+        <search>
+          <query>(index::$iCompany$-cli  sourcetype::fvAEPg OR sourcetype::fvcapRule )
+$xGroup$
+| eval type=coalesce(subj,sourcetype)
+| eventstats values(constraint) as constraint by type
+| fields type count constraint _time
+| bin span=1d _time
+| sort 0 -_time -count
+| dedup _time type 
+| rename count as "Used"
+| eval Free = constraint - Used
+| table _time Free Used</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.fieldColors">{"Free":0x53a051,"Used":0xdc4e41}</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Total L3 Context Fabric Wide</title>
+      <chart>
+        <search>
+          <query>(index::$iCompany$-cli  sourcetype::fvCtx) OR (index::$iCompany$-cli sourcetype::fvcapRule )
+$xGroup$
+| eval type=coalesce(subj,sourcetype)
+| eventstats values(constraint) as constraint by type
+| search sourcetype="fvCtx"
+| fields type count constraint _time
+| bin span=1d _time
+| sort 0 -_time -count
+| dedup _time type 
+| rename count as "Used"
+| eval Free = constraint - Used
+| table _time Free Used</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.fieldColors">{"Free":0x53a051,"Used":0xdc4e41}</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row id="scalability_2b">
+    <panel>
+      <title>Total Tenant Fabric Wide</title>
+      <chart>
+        <search>
+          <query>(index::$iCompany$-cli sourcetype::fvTenant OR sourcetype::fvcapRule )
+$xGroup$
+| eval type=coalesce(subj,sourcetype)
+| eventstats values(constraint) as constraint by type
+| search sourcetype="fvTenant"
+| fields type count constraint _time
+| bin span=1d _time
+| sort 0 -_time -count
+| dedup _time type 
+| rename count as "Used"
+| eval Free = constraint - Used
+| table _time Free Used</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.fieldColors">{"Free":0x53a051,"Used":0xdc4e41}</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+    <panel>
+      <title>Total Endpoint Fabric Wide</title>
+      <chart>
+        <search>
+          <query>(index::$iCompany$-cli  sourcetype::fvCEp OR sourcetype::fvcapRule )
+$xGroup$
+| eval type=coalesce(subj,sourcetype)
+| eventstats values(constraint) as constraint by type
+| search sourcetype="fvCEp"
+| fields type count constraint _time
+| bin span=1d _time
+| sort 0 -_time -count
+| dedup _time type 
+| rename count as "Used"
+| eval Free = constraint - Used
+| table _time Free Used</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">none</option>
+        <option name="charting.fieldColors">{"Free":0x53a051,"Used":0xdc4e41}</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+      </chart>
+    </panel>
+  </row>
+  <row id="scalability_3">
+    <panel>
+      <title>EPG Utilization Node-wise</title>
+      <chart>
+        <search>
+          <query>index::$iCompany$-cli sourcetype::ctxClassCnt name="fvEpP"
+| fields deviceId pod node dn count name _time 
+$xGroup$
+| sort 0 -_time
+| bin span=1d _time
+| dedup deviceId name _time
+| eval less_than_75 = if(count &lt; 2970 , 1, 0)
+| eval greater_than_75 = if(count &gt;= 2970, 1, 0)
+| stats sum(less_than_75) as less_than_75 sum(greater_than_75) as greater_than_75 by _time
+| table _time less_than_75 greater_than_75</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">all</option>
+        <option name="charting.fieldColors">{"less_than_75":0x53a051,"greater_than_75":0xdc4e41}</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <drilldown>
+          <set token="show_epg_utilization_node_wise_details">true</set>
+          <unset token="show_bd_utilization_node_wise_details"></unset>
+        </drilldown>
+      </chart>
+    </panel>
+    <panel>
+      <title>BD Utilization Node-wise</title>
+      <chart>
+        <search>
+          <query>index::$iCompany$-cli sourcetype::ctxClassCnt name="l2BD"
+| fields deviceId pod node dn count name _time 
+$xGroup$
+| sort 0 -_time
+| bin span=1d _time
+| dedup deviceId name _time
+| eval less_than_75 = if(count &lt; 2625, 1, 0)
+| eval greater_than_75 = if(count &gt;= 2625, 1, 0)
+| bin span=1d _time
+| stats sum(less_than_75) as less_than_75 sum(greater_than_75) as greater_than_75 by _time
+| table _time less_than_75 greater_than_75</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="charting.axisLabelsX.majorLabelStyle.overflowMode">ellipsisNone</option>
+        <option name="charting.axisLabelsX.majorLabelStyle.rotation">0</option>
+        <option name="charting.axisTitleX.visibility">visible</option>
+        <option name="charting.axisTitleY.visibility">visible</option>
+        <option name="charting.axisTitleY2.visibility">visible</option>
+        <option name="charting.axisX.abbreviation">none</option>
+        <option name="charting.axisX.scale">linear</option>
+        <option name="charting.axisY.abbreviation">none</option>
+        <option name="charting.axisY.scale">linear</option>
+        <option name="charting.axisY2.abbreviation">none</option>
+        <option name="charting.axisY2.enabled">0</option>
+        <option name="charting.axisY2.scale">inherit</option>
+        <option name="charting.chart">column</option>
+        <option name="charting.chart.bubbleMaximumSize">50</option>
+        <option name="charting.chart.bubbleMinimumSize">10</option>
+        <option name="charting.chart.bubbleSizeBy">area</option>
+        <option name="charting.chart.nullValueMode">gaps</option>
+        <option name="charting.chart.showDataLabels">all</option>
+        <option name="charting.chart.sliceCollapsingThreshold">0.01</option>
+        <option name="charting.chart.stackMode">stacked</option>
+        <option name="charting.chart.style">shiny</option>
+        <option name="charting.drilldown">all</option>
+        <option name="charting.fieldColors">{"less_than_75":0x53a051,"greater_than_75":0xdc4e41}</option>
+        <option name="charting.layout.splitSeries">0</option>
+        <option name="charting.layout.splitSeries.allowIndependentYRanges">0</option>
+        <option name="charting.legend.labelStyle.overflowMode">ellipsisMiddle</option>
+        <option name="charting.legend.mode">standard</option>
+        <option name="charting.legend.placement">right</option>
+        <option name="charting.lineWidth">2</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <drilldown>
+          <set token="show_bd_utilization_node_wise_details">true</set>
+          <unset token="show_epg_utilization_node_wise_details"></unset>
+        </drilldown>
+      </chart>
+    </panel>
+  </row>
+  <row id="scalability_3_details">
+    <panel depends="$show_epg_utilization_node_wise_details$">
+      <title>EPG Utilization Node-wise details</title>
+      <table>
+        <search>
+          <query>| tstats count where (index::$iCompany$-cli sourcetype::ctxClassCnt name="fvEpP") by sourcetype deviceId pod node dn name _time
+$xGroup$ 
+| lookup local=true $iCompany$-device_details.csv deviceId OUTPUT deviceName as hostname 
+| mvexpand hostname 
+| search hostname!=fvEpP 
+| sort 0 -_time 
+| dedup deviceId _time 
+| eval percent_utilization = round( (count / 400)*100 , 1) 
+| table hostname pod node percent_utilization count _time 
+| sort 0 -percent_utilization -_time</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel depends="$show_bd_utilization_node_wise_details$">
+      <title>BD Utilization Node-wise details</title>
+      <table>
+        <search>
+          <query>| tstats count where (index::$iCompany$-cli sourcetype::ctxClassCnt name="l2BD") by sourcetype deviceId pod node dn name _time
+$xGroup$ 
+| lookup local=true $iCompany$-device_details.csv deviceId OUTPUT deviceName as hostname 
+| mvexpand hostname 
+| search hostname!=l2BD 
+| sort 0 -_time 
+| dedup deviceId _time 
+| eval percent_utilization = round( (count / 3500)*100 , 1) 
+| table hostname pod node percent_utilization count _time 
+| sort 0 -percent_utilization -_time</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+</form>

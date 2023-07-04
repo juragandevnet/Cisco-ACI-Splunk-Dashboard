@@ -1,0 +1,1366 @@
+<form script="tabs.js" theme="dark">
+  <label>Health Check</label>
+  <init>
+    <set token="iGroup"></set>
+  </init>
+  <search id="set_user">
+    <query>
+       | makeresults
+       | eval userId="$env:user$"
+     </query>
+    <done>
+      <set token="userId">$result.userId$</set>
+    </done>
+  </search>
+  <search id="set_company">
+    <query>
+       | inputlookup kvstore_companies where cpyKey="$cpyKey$"
+     </query>
+    <done>
+      <set token="defaultCpyName">$result.cpyName$</set>
+    </done>
+  </search>
+  <!-- In the past had to use the userId from the above makeresutls ? -->
+  <search id="get_customer">
+    <query>
+       | inputlookup kvstore_last where key="cpyKey"
+       | search user="$userId$"
+       | fields value _key
+     </query>
+    <done>
+      <condition match="'job.resultCount' != 0">
+        <set token="cpyKey">$result.value$</set>
+        <set token="cpyKey_key">$result._key$</set>
+      </condition>
+    </done>
+  </search>
+  <search id="update_last_cpyKey" depends="$cpyKey_key$,$iCompany$">
+    <query>
+      | makeresults
+      | eval value="$iCompany$", key="cpyKey", user="$userId$", _key="$cpyKey_key$"
+      | outputlookup kvstore_last append=True
+    </query>
+  </search>
+  <search id="create_last_cpyKey" rejects="$cpyKey_key$" depends="$iCompany$">
+    <query>
+      | makeresults
+      | eval value="$iCompany$", key="cpyKey", user="$userId$"
+      | outputlookup kvstore_last append=True
+    </query>
+  </search>
+  <!--  <row id="operations_memory_trend">-->
+  <!--    <panel>-->
+  <!--      <title>Memory Trend analysis</title>-->
+  <!--      <input type="text" token="filter_memory_Trend_threshold" searchWhenChanged="true">-->
+  <!--        <label>Enter  Prediction Threshold</label>-->
+  <!--        <default>80</default>-->
+  <!--        <initialValue>80</initialValue>-->
+  <!--      </input>-->
+  <!--      <input type="dropdown" token="Mon_filter" searchWhenChanged="true">-->
+  <!--        <label>Time Range</label>-->
+  <!--        <choice value="3">3 Months</choice>-->
+  <!--        <choice value="6">6 Months</choice>-->
+  <!--        <choice value="12">12 Months</choice>-->
+  <!--        <choice value="15">15 Months</choice>-->
+  <!--        <choice value="18">18 Months</choice>-->
+  <!--        <choice value="24">24 Months</choice>-->
+  <!--        <default>6</default>-->
+  <!--        <initialValue>6</initialValue>-->
+  <!--      </input>-->
+  <!--      <table>-->
+  <!--        <search>-->
+  <!--          <query>(index="$iCompany$-cli" sourcetype="procSysMem1d" )-->
+  <!--| table dn apic_ip_address deviceId _time timeStamp pod node usedAvg totalMax-->
+  <!--$xGroup$-->
+  <!--| rex field=dn "(?&lt;pod&gt;pod-[0-9]*)\/(?&lt;node&gt;node-[0-9]*)\/(?&lt;location&gt;\w+\/\w+\/\w+-[0-9]*\/\w+\/\w+)"-->
+  <!--| eval usedAveragePercent = round((usedAvg/totalMax)*100)-->https://as-practice-10.cisco.com:8000/en-US/app/aci-test/<!--| fields apic_ip_address node pod usedAveragePercent  _time groupId-->
+  <!--$sGroup$-->
+  <!--| bin span=7d _time -->
+  <!--| stats latest(*) as * by apic_ip_address node, pod _time -->
+  <!--| fields apic_ip_address usedAveragePercent node pod _time  -->
+  <!--| eval static_columns=apic_ip_address+"::"+node+"::"+pod -->
+  <!--| eval time=strftime(_time, "%Y-%m-%d") -->
+  <!--| xyseries static_columns time usedAveragePercent -->
+  <!--| rex field=static_columns "^(?&lt;apic_ip_address&gt;.*?)::(?&lt;node&gt;.*?)::(?&lt;pod&gt;.*?)$" -->
+  <!--| fields - static_columns -->
+  <!--| lookup 103063-apics apic_ip_address -->
+  <!--| fields apic_ip_address apic_cluster_name node pod *-->
+  <!--| table apic_ip_address  node pod *-->
+  <!--| fillnull value=-1-->
+  <!--| join type=left apic_ip_address  node pod-->
+  <!--    [| inputlookup 103063_Prediction.csv -->
+  <!--    | fields Predicted_Date Prediction_Lower_Limit Prediction_Upper_Limit apic_ip_address node pod -->
+  <!--    | eval Prediction_Range ="["+Prediction_Lower_Limit+"-"+Prediction_Upper_Limit+"]" -->
+  <!--    | eval expected_date=strftime(relative_time(now(),"+$Mon_filter$mon@mon"), "%Y-%m-%d") -->
+  <!--    | where Predicted_Date&lt;expected_date and Prediction_Upper_Limit&gt;=$filter_memory_Trend_threshold$-->
+  <!--    | sort 150000 Predicted_Date -->
+  <!--    | fields apic_ip_address node pod Predicted_Date Prediction_Range -->
+  <!--    | dedup apic_ip_address node pod-->
+  <!--    | fields apic_ip_address node pod Predicted_Date Prediction_Range  ] -->
+  <!--| table apic_ip_address apic_cluster_name node pod * Predicted_Date Prediction_Range -->
+  <!--| where isnotnull(Predicted_Date)</query>-->
+  <!--          <earliest>0</earliest>-->
+  <!--          <latest>now</latest>-->
+  <!--          <sampleRatio>1</sampleRatio>-->
+  <!--        </search>-->
+  <!--        <option name="count">10</option>-->
+  <!--        <option name="dataOverlayMode">none</option>-->
+  <!--        <option name="drilldown">cell</option>-->
+  <!--        <option name="percentagesRow">false</option>-->
+  <!--        <option name="refresh.display">progressbar</option>-->
+  <!--        <option name="rowNumbers">true</option>-->
+  <!--        <option name="totalsRow">false</option>-->
+  <!--        <option name="wrap">false</option>-->
+  <!--        <format type="color">-->
+  <!--          <colorPalette type="list">[#708794,#53A051,#F8BE34,#DC4E41]</colorPalette>-->
+  <!--          <scale type="threshold">0,60,80</scale>-->
+  <!--        </format>-->
+  <!--        <drilldown>-->
+  <!--          <set token="Trend_node">$row.node$</set>-->
+  <!--          <set token="Trend_ip">$row.apic_ip_address$</set>-->
+  <!--          <set token="Trend_pod">$row.pod$</set>-->
+  <!--          <unset token="show_memory_Results"></unset>-->
+  <!--          <unset token="show_memory_Usage_details"></unset>-->
+  <!--          <set token="show_memory_Prediction1">true</set>-->
+  <!--          <set token="show_memory_Prediction">true</set>-->
+  <!--          <set token="Trend_cluster">$row.apic_cluster_name$</set>-->
+  <!--        </drilldown>-->
+  <!--      </table>-->
+  <!--    </panel>-->
+  <!--  </row>-->
+  <fieldset submitButton="false">
+    <input type="time" token="global_time" searchWhenChanged="true">
+      <label>Select Time Range</label>
+      <default>
+        <earliest>-7d@h</earliest>
+        <latest>now</latest>
+      </default>
+    </input>
+    <input type="dropdown" token="iCompany" searchWhenChanged="true">
+      <label>Company</label>
+      <fieldForLabel>cpyName</fieldForLabel>
+      <fieldForValue>cpyKey</fieldForValue>
+      <search>
+        <query>| inputlookup kvstore_companies | fields cpyKey cpyName theater
+| dedup cpyKey,cpyName | table cpyKey,cpyName 
+| sort cpyName</query>
+        <earliest>-24h@h</earliest>
+        <latest>now</latest>
+      </search>
+      <default>$cpyKey$</default>
+      <initialValue>$cpyKey$</initialValue>
+    </input>
+    <input type="dropdown" token="iGroup" searchWhenChanged="true">
+      <label>Group</label>
+      <fieldForLabel>name_id</fieldForLabel>
+      <fieldForValue>groupId</fieldForValue>
+      <search>
+        <query>|  tstats count where index="$iCompany$-np" sourcetype::groups earliest=-4d@d by groupId, groupName
+| eval name_id = groupName+" ("+groupId+")"
+| fields name_id groupId
+
+| sort name_id</query>
+        <earliest>-30d@d</earliest>
+        <latest>now</latest>
+      </search>
+      <change>
+        <condition match=" isnull( $value$ ) ">
+          <set token="iGroup"></set>
+        </condition>
+        <condition>
+          <set token="iGroup">OR (index="$iCompany$-np" sourcetype::group_members groupId=$value$)</set>
+          <set token="xGroup">| eval groupId=$value$ | lookup local=true $iCompany$-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)</set>
+          <set token="sGroup">|search groupId=$value$</set>
+        </condition>
+      </change>
+      <choice value="&quot;*&quot;">All</choice>
+      <default>666666</default>
+      <initialValue>666666</initialValue>
+    </input>
+  </fieldset>
+  <row id="debug" depends="$form.debug$">
+    <panel>
+      <html>
+        <code>
+          iGroup: $iGroup$<br/>
+          xGroup: $xGroup$
+        </code>
+      </html>
+      <html>
+      <p>
+         <strong>Reference </strong>
+       <a href="">Documentation (Wiki)</a>
+      </p>
+    </html>
+    </panel>
+  </row>
+  <row id="Reference">
+    <panel>
+      <html>
+      </html>
+      <html>
+      <p>
+         <strong>Reference </strong>
+       <a target="_blank" href="">Documentation (Wiki)</a>
+      </p>
+    </html>
+    </panel>
+  </row>
+  <row id="operations_1">
+    <panel>
+      <title>ACI Switch CPU Status</title>
+      <single>
+        <title>Value In Percentage</title>
+        <search>
+          <query>(index::363636-cli sourcetype::procSysCPU1d)
+| fields dn apic_ip_address deviceId _time timeStamp node userAvg
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| stats latest(*) as * by deviceId
+| eventstats count(userAvg) as TotalColumnUserAvg
+| search (userAvg &lt;= 80 )
+| eventstats count(userAvg) as TotalViolations
+| eval Result = round ( ( TotalViolations / TotalColumnUserAvg ) * 100, 1 )
+| dedup Result
+| table Result</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0xdc4e41","0x53a051"]</option>
+        <option name="rangeValues">[99]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+        <drilldown>
+          <unset token="show_fan_status_details"></unset>
+          <unset token="show_psu_status_details"></unset>
+          <set token="show_controllers_single_connection_details">true</set>
+          <unset token="show_card_status_details"></unset>
+          <unset token="show_chassis_status_details"></unset>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title>ACI Switch Memory Status</title>
+      <single>
+        <title>Value In Percentage</title>
+        <search>
+          <query>(index::363636-cli sourcetype::procSysMem1d) 
+| fields dn apic_ip_address deviceId _time timeStamp node usedAvg totalMax
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| stats latest(*) as * by deviceId
+| eval UsedAveragePercent = round((usedAvg/totalMax)*100)
+| eventstats count(UsedAveragePercent) as TotalUsedAveragePercent
+| search (UsedAveragePercent &lt;= 80)
+| eventstats count(UsedAveragePercent) as TotalViolations
+| eval Result = round ( (TotalViolations / TotalUsedAveragePercent ) * 100, 1)
+| dedup Result
+| table Result</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0xdc4e41","0x53a051"]</option>
+        <option name="rangeValues">[99]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+        <drilldown>
+          <unset token="show_fan_status_details"></unset>
+          <unset token="show_psu_status_details"></unset>
+          <unset token="show_controllers_single_connection_details"></unset>
+          <set token="show_card_status_details">true</set>
+          <unset token="show_chassis_status_details"></unset>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title>APIC And Switch Fan Status</title>
+      <single>
+        <title>Value In Percentage</title>
+        <search>
+          <query>| tstats count where ( index::363636-cli sourcetype::eqptFan ) by sourcetype deviceId operSt id pod node dn _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| dedup dn
+| eventstats count(dn) as TotalFans
+| search (operSt::ok)
+| stats count(operSt) as TotaloperStOK, max(TotalFans) as TotalFans
+| eval Percent_Utilization = round ( ( TotaloperStOK / TotalFans ) * 100, 1 )
+| table Percent_Utilization</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0xdc4e41","0x53a051"]</option>
+        <option name="rangeValues">[99]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+        <drilldown>
+          <set token="show_fan_status_details">true</set>
+          <unset token="show_psu_status_details"></unset>
+          <unset token="show_controllers_single_connection_details"></unset>
+          <unset token="show_card_status_details"></unset>
+          <unset token="show_chassis_status_details"></unset>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title>APIC And Switch PSU Status</title>
+      <single>
+        <title>Value In Percentage</title>
+        <search>
+          <query>| tstats count where ( index::363636-cli sourcetype::eqptPsu ) by sourcetype deviceId fanOpSt operSt id pod node dn _time
+| eval groupId=666666 | lookup local=true 363636-topsystem.csv deviceId OUTPUT node role pod
+| dedup dn
+| eventstats count(dn) as TotalPSUs
+| search ( (fanOpSt::unknown AND operSt::ok AND role::controller) OR (fanOpSt::ok AND operSt::ok))
+| stats count(operSt) as TotaloperSt, max(TotalPSUs) as TotalPSUs
+| eval Percent_Utilization = round ( ( TotaloperSt / TotalPSUs ) * 100, 1)
+| table Percent_Utilization</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0xdc4e41","0x53a051"]</option>
+        <option name="rangeValues">[99]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+        <drilldown>
+          <unset token="show_fan_status_details"></unset>
+          <set token="show_psu_status_details">true</set>
+          <unset token="show_controllers_single_connection_details"></unset>
+          <unset token="show_card_status_details"></unset>
+          <unset token="show_chassis_status_details"></unset>
+        </drilldown>
+      </single>
+    </panel>
+  </row>
+  <row id="operations_1_details">
+    <panel depends="$show_controllers_single_connection_details$">
+      <title>ACI Switch CPU Status Details</title>
+      <table>
+        <search>
+          <query>(index::363636-cli sourcetype::procSysCPU1d)
+| fields dn apic_ip_address deviceId _time timeStamp node userAvg totalMax
+| eval UserAvg = round(userAvg , 1)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role 
+| stats latest(*) as * by deviceId _time
+| sort 0 -UserAvg
+| table hostname node pod role UserAvg _time</query>
+          <earliest>-14d@h</earliest>
+          <latest>now</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel depends="$show_card_status_details$">
+      <title>Card Status Details</title>
+      <table>
+        <search>
+          <query>(index::363636-cli sourcetype::procSysMem1d) 
+| fields dn apic_ip_address deviceId _time timeStamp node usedAvg totalMax
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role 
+| stats latest(*) as * by deviceId _time
+| eval UsedAveragePercent = round((usedAvg/totalMax)*100)
+| sort 0 -UsedAveragePercent
+| table hostname node pod role UsedAveragePercent _time</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel depends="$show_fan_status_details$">
+      <title>Fan Status Details</title>
+      <table>
+        <search>
+          <query>(index::363636-cli sourcetype::eqptFan) 
+| fields deviceId operSt id _time
+| stats latest(*) as * by deviceId, id, _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| dedup hostname
+| table hostname node pod role operSt</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel depends="$show_psu_status_details$">
+      <title>PSU Status Details</title>
+      <table>
+        <search>
+          <query>(index::363636-cli sourcetype::eqptPsu) 
+| fields deviceId fanOpSt id operSt _time 
+| stats latest(*) as * by deviceId, id _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node role pod 
+| dedup hostname
+| table hostname node pod role fanOpSt operSt</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>APIC Cpu Status</title>
+      <single>
+        <title>Value In Percentage</title>
+        <search>
+          <query>(index::363636-cli  sourcetype::procCPU1d)
+| fields sourcetype deviceId pod node currentAvg currentMax currentMin name _time dn
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| stats avg(currentAvg) as CurrentAvg by deviceId _time
+| eval CurrentAvg = round ( CurrentAvg, 1)
+| eventstats count(CurrentAvg) as TotalCurrentAvgColumn
+| search (CurrentAvg &lt;= 80)
+| eventstats count(CurrentAvg) as TotalViolations
+| eval Result = round ( ( TotalViolations / TotalCurrentAvgColumn ) * 100, 1)
+| dedup Result
+| table Result</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0xdc4e41","0x53a051"]</option>
+        <option name="rangeValues">[99]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+        <drilldown>
+          <set token="show_apic_high_cpu_usage_details">true</set>
+          <unset token="show_switches_high_cpu_usage_details"></unset>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title>APIC Memory Status</title>
+      <single>
+        <title>Value In Percentage</title>
+        <search>
+          <query>(index::363636-cli sourcetype::procMem1d)
+| fields sourcetype deviceId pod node currentAvg currentTtl name _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| eventstats values(name) as hostname by deviceId
+| search sourcetype="procMem1d"
+| table hostname pod node currentAvg currentTtl _time
+| eventstats count(currentTtl) as TotalCurrentTtl
+| eval percent_utilization = round ( ( currentAvg / currentTtl ) * 100 , 1)
+| search (percent_utilization &lt;= 50 )
+| eventstats count(percent_utilization) as Total_Percent_Utilization
+| eval Result = round ( ( Total_Percent_Utilization / TotalCurrentTtl ) * 100 , 1)
+| dedup Result
+| table Result</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="rangeColors">["0xdc4e41","0x53a051"]</option>
+        <option name="rangeValues">[99]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="useColors">1</option>
+        <drilldown>
+          <unset token="show_apic_high_cpu_usage_details">true</unset>
+          <set token="show_switches_high_cpu_usage_details">true</set>
+        </drilldown>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel depends="$show_apic_high_cpu_usage_details$">
+      <title>APIC Cpu Details</title>
+      <table>
+        <search>
+          <query>(index::363636-cli  sourcetype::procCPU1d)
+| fields sourcetype deviceId pod node currentAvg currentMax currentMin name _time dn
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| eventstats values(name) as hostname by deviceId
+| search sourcetype="procCPU1d"
+| dedup deviceId dn _time
+| stats avg(currentAvg) as total_currentAvg by hostname _time node pod role
+| eval total_currentAvg = round (total_currentAvg , 2)
+| bin span=1d _time
+| sort 0 -_time -total_currentAvg hostname</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel depends="$show_switches_high_cpu_usage_details$">
+      <title>APIC Memory Details</title>
+      <table>
+        <search>
+          <query>(index::363636-cli sourcetype::procMem1d)
+| fields sourcetype deviceId pod node currentAvg currentTtl name _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| eventstats values(name) as hostname by deviceId
+| search sourcetype="procMem1d"
+| eval percent_utilization = round ( ( currentAvg / currentTtl) * 100 , 1)
+| table hostname pod node role percent_utilization _time
+| sort 0 -percent_utilization
+| dedup hostname _time</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+  <row id="operations_2">
+    <panel>
+      <title>Egress Interface Errors</title>
+      <single>
+        <title>Value In Percentage</title>
+        <search>
+          <query>| tstats count where ( index::363636-cli sourcetype::eqptEgrDropPkts1d ) by sourcetype deviceId dn errorCum _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| rex field=dn "node-\d+\/[^\/]+\/(?&lt;interface&gt;.+?)\/CDeqptEgrDropPkts1d"
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| table hostname pod node interface errorCum _time
+| dedup hostname interface _time
+| eventstats count(errorCum) as TotalColumnErrCum
+| search (errorCum::0)
+| stats count(errorCum) as TotalAmountErrCum, max(TotalColumnErrCum) as TotalColumnErrCum
+| eval Percent_Utilization = round ( ( TotalAmountErrCum / TotalColumnErrCum) * 100 , 1)
+| table Percent_Utilization</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0x53a051","0x53a051"]</option>
+        <option name="rangeValues">[99]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+        <drilldown>
+          <set token="show_egress_interface_errors_details">true</set>
+          <unset token="show_ingress_interface_error_details"></unset>
+          <unset token="show_apic_unhealthy_device_details"></unset>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title>Ingress Interface Errors</title>
+      <single>
+        <title>Value In Percentage</title>
+        <search>
+          <query>| tstats count where ( index::363636-cli sourcetype::eqptIngrDropPkts1d ) by sourcetype deviceId dn errorCum _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| rex field=dn "node-\d+\/[^\/]+\/(?&lt;interface&gt;.+?)\/CDeqptIngrDropPkts1d"
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| table hostname pod node interface errorCum _time
+| dedup hostname interface _time
+| eventstats count(errorCum) as TotalColumnErrCum
+| search (errorCum::0)
+| stats count(errorCum) as TotalAmountErrCum, max(TotalColumnErrCum) as TotalColumnErrCum
+| eval Percent_Utilization = round ( ( TotalAmountErrCum / TotalColumnErrCum) * 100 , 1)
+| table Percent_Utilization</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0xdc4e41","0x53a051"]</option>
+        <option name="rangeValues">[99]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+        <drilldown>
+          <unset token="show_egress_interface_errors_details"></unset>
+          <set token="show_ingress_interface_error_details">true</set>
+          <unset token="show_apic_unhealthy_device_details"></unset>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title>APIC Healthy Devices</title>
+      <single>
+        <title>Value In Percentage</title>
+        <search>
+          <query>(index::363636-cli sourcetype::infraWiNode)
+| fields deviceId pod addr adminSt apicMode health nodeName operSt modTs dn _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| dedup node _time
+| eval Score = if ( (operSt!="available") OR (health!="fully-fit") OR (adminSt!="in-service") , 0 , 100 )
+| eventstats count(node) as TotalNodes
+| search (Score::100)
+| eventstats count(Score) as TotalScore
+| eval Result = round ( ( TotalScore / TotalNodes ) * 100 , 1)
+| dedup Result
+| table Result</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0xdc4e41","0x53a051"]</option>
+        <option name="rangeValues">[99]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+        <drilldown>
+          <unset token="show_egress_interface_errors_details"></unset>
+          <unset token="show_ingress_interface_error_details"></unset>
+          <set token="show_apic_unhealthy_device_details">true</set>
+        </drilldown>
+      </single>
+    </panel>
+  </row>
+  <row id="operations_2_details">
+    <panel depends="$show_egress_interface_errors_details$">
+      <title>Egress Interface Errors details</title>
+      <table>
+        <search>
+          <query>(index::363636-cli sourcetype::eqptEgrDropPkts1d)
+| fields sourcetype deviceId pod node dn errorCum name _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| eventstats values(name) as hostname by deviceId
+| search sourcetype="eqptEgrDropPkts1d"
+| rex field=dn "node-\d+\/[^\/]+\/(?&lt;interface&gt;.+?)\/CDeqptEgrDropPkts1d"
+| table hostname pod node interface errorCum _time
+| sort 0 -errorCum
+| dedup hostname interface _time</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel depends="$show_ingress_interface_error_details$">
+      <title>Ingress Interface Errors details</title>
+      <table>
+        <search>
+          <query>(index::363636-cli sourcetype::eqptIngrDropPkts1d)
+| fields sourcetype deviceId pod node dn errorCum name _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| eventstats values(name) as hostname by deviceId
+| search sourcetype="eqptIngrDropPkts1d"
+| rex field=dn "node-\d+\/[^\/]+\/(?&lt;interface&gt;.+?)\/CDeqptIngrDropPkts1d"
+| table hostname pod node interface errorCum _time
+| sort 0 -errorCum
+| dedup hostname interface _time</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+    <panel depends="$show_apic_unhealthy_device_details$">
+      <title>APIC healthy devices details</title>
+      <table>
+        <search>
+          <query>(index::363636-cli sourcetype::infraWiNode)
+| fields deviceId pod addr adminSt apicMode health nodeName operSt modTs dn _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| dedup node _time
+| eval Score = if ( (operSt!="available") OR (health!="fully-fit") OR (adminSt!="in-service") , 0 , 100 )
+| table hostname node pod role Score _time
+| sort Score</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">true</option>
+      </table>
+    </panel>
+  </row>
+  <row id="operations_4">
+    <panel>
+      <title>SSD Usage Percentage Utilization</title>
+      <single>
+        <title>Value In Percentage</title>
+        <search>
+          <query>| tstats count where (index::363636-cli sourcetype::eqptFlash ) by dn operSt lifetime deviceId apic_ip_address _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| eventstats latest(*) as * by deviceId
+| eval Score = if ( operSt == "ok" AND lifetime &lt;= 5, 100 , 0 )
+| eventstats count(dn) as totalDn
+| search (Score::100)
+| eventstats count(Score) as TotalScore
+| eval Result = round ( ( TotalScore / totalDn ) * 100 , 1)
+| dedup Result
+| table Result</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0xdc4e41","0x53a051"]</option>
+        <option name="rangeValues">[99]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+        <drilldown>
+          <set token="SSD_Usage_Results_Details">true</set>
+          <unset token="ACI_Switch_Module_Details"></unset>
+          <unset token="Temperature_Status_Details"></unset>
+          <unset token="ACI_Switch_Diagnostic_Details"></unset>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title>ACI Switch Module Status</title>
+      <single>
+        <title>Value In Percentage</title>
+        <search>
+          <query>(index::363636-cli sourcetype::eqptCard)
+| fields deviceId pod nodeName operSt dn _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| stats latest(*) as * by deviceId _time
+| search (operSt::online)
+| dedup deviceId _time
+| eventstats count(operSt) as TotalColumnOperSt
+| search (operSt::online)
+| eventstats count(hostname) as TotalHostname
+| eval Result = round ( ( TotalHostname / TotalColumnOperSt ) * 100 , 1)
+| dedup Result
+| table Result</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0xdc4e41","0x53a051"]</option>
+        <option name="rangeValues">[99]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+        <drilldown>
+          <unset token="SSD_Usage_Results_Details"></unset>
+          <set token="ACI_Switch_Module_Details">True</set>
+          <unset token="Temperature_Status_Details"></unset>
+          <unset token="ACI_Switch_Diagnostic_Details"></unset>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title>Temperature Status</title>
+      <single>
+        <title>Value In Percentage</title>
+        <search>
+          <query>(index::363636-cli sourcetype::eqptTemp1d)
+| fields deviceId currentAvg node dn _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| dedup deviceId dn _time
+| stats latest(*) as * by deviceId
+| eventstats count(currentAvg) as pre_TotalCurrentAvg
+| search (currentAvg &lt;= 80)
+| eventstats count(currentAvg) as post_TotalCurrentAvg
+| eval result = round ( ( post_TotalCurrentAvg / pre_TotalCurrentAvg) * 100, 1)
+| dedup result
+| table result</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0xdc4e41","0x53a051"]</option>
+        <option name="rangeValues">[99]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+        <drilldown>
+          <unset token="SSD_Usage_Results_Details"></unset>
+          <unset token="ACI_Switch_Module_Details"></unset>
+          <set token="Temperature_Status_Details">True</set>
+          <unset token="ACI_Switch_Diagnostic_Details"></unset>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title>ACI Switch Diagnostic Status</title>
+      <single>
+        <title>Value In Percentage</title>
+        <search>
+          <query>(index::363636-cli sourcetype::eqptdiagASubj)
+| fields deviceId lastExecFailQual numExecConsFail numExecFail operSt operStQual node dn _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| stats values(*) as * by deviceId
+| eventstats count(node) as TotalNodes
+| search (operSt::pass)
+| eventstats count(operSt) as TotalOperSt
+| eval result = round ( ( TotalOperSt / TotalNodes) * 100, 1)
+| dedup result
+| table result</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0xdc4e41","0x53a051"]</option>
+        <option name="rangeValues">[99]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+        <drilldown>
+          <unset token="SSD_Usage_Results_Details"></unset>
+          <unset token="ACI_Switch_Module_Details"></unset>
+          <unset token="Temperature_Status_Details"></unset>
+          <set token="ACI_Switch_Diagnostic_Details">True</set>
+        </drilldown>
+      </single>
+    </panel>
+  </row>
+  <row id="operations_4_details">
+    <panel depends="$SSD_Usage_Results_Details$">
+      <title>SSD Usage Utilization Details</title>
+      <table>
+        <search>
+          <query>| tstats count where (index::363636-cli sourcetype::eqptFlash) by dn operSt lifetime deviceId apic_ip_address _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId) 
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| eval time=strftime(_time,"%Y-%m-%d")
+| stats latest(*) as * by deviceId _time
+| rex field=dn "(?&lt;pod&gt;pod-[0-9]*)\/(?&lt;node&gt;node-[0-9]*)\/(?&lt;location&gt;\w+\/\w+\/\w+-[0-9]*\/\w+\/\w+)"
+| dedup node
+| table hostname node pod role operSt lifetime
+| sort 0 -lifetime operSt</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">false</option>
+      </table>
+    </panel>
+    <panel depends="$ACI_Switch_Module_Details$">
+      <title>ACI Switch Module Status Details</title>
+      <table>
+        <search>
+          <query>(index::363636-cli sourcetype::eqptCard)
+| fields deviceId pod nodeName operSt dn _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| stats latest(*) as * by deviceId _time
+| search (operSt::online)
+| dedup node
+| sort 0 operSt
+| table hostname node pod role operSt _time</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">false</option>
+      </table>
+    </panel>
+    <panel depends="$Temperature_Status_Details$">
+      <title>Temperature Status Details</title>
+      <table>
+        <search>
+          <query>(index::363636-cli sourcetype::eqptTemp1d)
+| fields deviceId currentAvg node dn _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| dedup deviceId dn _time
+| stats latest(*) as * by deviceId
+| table hostname node pod role currentAvg
+| sort 0 -currentAvg</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">false</option>
+      </table>
+    </panel>
+    <panel depends="$ACI_Switch_Diagnostic_Details$">
+      <title>ACI Switch Diagnostic Status Details</title>
+      <table>
+        <search>
+          <query>(index::363636-cli sourcetype::eqptdiagASubj)
+| fields deviceId lastExecFailQual numExecConsFail numExecFail operSt operStQual node dn _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| stats latest(*) as * by deviceId
+| table hostname node pod role numExecConsFail numExecFail operStQual operSt
+| sort 0 operSt</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">false</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>IS-IS Adjacency Status</title>
+      <single>
+        <title>Value In Percentage</title>
+        <search>
+          <query>(index::363636-cli sourcetype::isisAdjEp)
+| fields deviceId bfdConfigSt bfdOperSt operSt node dn _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| stats values(*) as * by deviceId
+| eventstats count(node) as TotalNodes
+| search (operSt::up)
+| eventstats count(operSt) as TotalOperSt
+| eval result = round ( ( TotalOperSt / TotalNodes ) * 100 , 1)
+| dedup result
+| table result</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0xdc4e41","0x53a051"]</option>
+        <option name="rangeValues">[99]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+        <drilldown>
+          <set token="IS-IS_Adjancecy_Status_Details">True</set>
+          <unset token="BGP_Adjacency_Status_Details"></unset>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title>BGP Adjacency Status</title>
+      <single>
+        <title>Value In Percentage</title>
+        <search>
+          <query>(index::363636-cli sourcetype::bgpPeerEntry)
+| fields deviceId locallp rtrId operSt node dn _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| stats latest(*) as * by deviceId
+| eventstats count(node) as TotalNodes
+| search (operSt::established)
+| eventstats count(operSt) as TotalOperSt
+| eval result = round ( ( TotalOperSt / TotalNodes ) * 100 , 1)
+| dedup result
+| table result</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0xdc4e41","0x53a051"]</option>
+        <option name="rangeValues">[99]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="showSparkline">1</option>
+        <option name="showTrendIndicator">1</option>
+        <option name="trellis.enabled">0</option>
+        <option name="trellis.scales.shared">1</option>
+        <option name="trellis.size">medium</option>
+        <option name="trendColorInterpretation">standard</option>
+        <option name="trendDisplayMode">absolute</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">1</option>
+        <drilldown>
+          <unset token="IS-IS_Adjancecy_Status_Details"></unset>
+          <set token="BGP_Adjacency_Status_Details">True</set>
+        </drilldown>
+      </single>
+    </panel>
+  </row>
+  <row>
+    <panel depends="$IS-IS_Adjancecy_Status_Details$">
+      <title>IS-IS Adjancecy Status Details</title>
+      <table>
+        <search>
+          <query>(index::363636-cli sourcetype::isisAdjEp)
+| fields deviceId bfdConfigSt bfdOperSt operSt node dn _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| stats latest(*) as * by deviceId
+| table hostname node pod role bfdConfigSt bfdOperSt operSt
+| sort 0 operSt</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">false</option>
+      </table>
+    </panel>
+    <panel depends="$BGP_Adjacency_Status_Details$">
+      <title>BGP Adjacency Status Details</title>
+      <table>
+        <search>
+          <query>(index::363636-cli sourcetype::bgpPeerEntry)
+| fields deviceId localIp rtrId operSt node dn _time
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname node pod role
+| stats latest(*) as * by deviceId _time
+| rename localIp as Local_IP, rtrId as Remote_Ip
+| table hostname node pod role Local_IP Remote_Ip operSt node dn _time
+| dedup node dn _time
+| sort 0 -operSt</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+          <sampleRatio>1</sampleRatio>
+        </search>
+        <option name="count">10</option>
+        <option name="dataOverlayMode">none</option>
+        <option name="drilldown">none</option>
+        <option name="percentagesRow">false</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="rowNumbers">false</option>
+        <option name="totalsRow">false</option>
+        <option name="wrap">false</option>
+      </table>
+    </panel>
+  </row>
+  <row>
+    <panel>
+      <title>Total Number Of Operationally Down Ports</title>
+      <single>
+        <title>Total Number Of Operationally Down Ports</title>
+        <search>
+          <query>(index::363636-cli sourcetype::ethpmPhysIf) OR (index::363636-cli sourcetype::l1PhysIf) 
+| fields dn apic_ip_address deviceId adminSt _time timeStamp node operSt pod usage lastLinkStChg operStQual
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| rex field=dn ".*\[(?&lt;interface&gt;.*)\]"
+| stats latest(*) as * by pod, node, interface, deviceId
+| search NOT (adminSt::up AND operSt::up)
+| search (adminSt::up AND operSt::down)
+| stats count as "Total Free Ports" by pod, node, interface, deviceId 
+| stats sum("Total Free Ports")
+| appendpipe [ | stats count | eval "Total Free Ports" = if(count==0, 0, "Total Free Ports") ]
+| table "Total Free Ports"</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+        </search>
+        <option name="colorBy">value</option>
+        <option name="colorMode">block</option>
+        <option name="drilldown">all</option>
+        <option name="numberPrecision">0</option>
+        <option name="rangeColors">["0x53a051","0xdc4e41"]</option>
+        <option name="rangeValues">[0]</option>
+        <option name="refresh.display">progressbar</option>
+        <option name="unitPosition">after</option>
+        <option name="useColors">1</option>
+        <option name="useThousandSeparators">0</option>
+        <drilldown>
+          <set token="free_ports_available_details">true</set>
+        </drilldown>
+      </single>
+    </panel>
+    <panel>
+      <title>Operationally Down Ports distribution by Reason</title>
+      <chart>
+        <title>Operationally Down Ports distribution by Reason</title>
+        <search>
+          <query>(index::363636-cli sourcetype::ethpmPhysIf) 
+| search NOT (operStQual = "none" AND operSt = "up")
+| fields dn apic_ip_address deviceId _time timeStamp node operSt pod operStQual lastLinkStChg 
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| rex field=dn ".*\[(?&lt;interface&gt;.*)\]" 
+| search NOT (operSt::down AND ( operStQual::sfp-missing OR operStQual::admin-down) )
+| stats latest(*) as * by pod, node, interface, deviceId | table pod,node,interface,operStQual,lastLinkStChg | stats count by operStQual</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+        </search>
+        <option name="charting.chart">pie</option>
+        <option name="charting.drilldown">none</option>
+        <option name="refresh.display">progressbar</option>
+      </chart>
+    </panel>
+  </row>
+  <row>
+    <panel depends="$free_ports_available_details$">
+      <title>Operationally Down Port Details</title>
+      <table>
+        <title>Operationally Down Port Details</title>
+        <search>
+          <query>(index::363636-cli sourcetype::ethpmPhysIf) OR (index::363636-cli sourcetype::l1PhysIf) 
+| fields dn apic_ip_address deviceId adminSt _time timeStamp node operSt operStQual pod lastLinkStChg descr usage
+| eval groupId=666666 | lookup local=true 363636-group_members.csv deviceId groupId OUTPUT groupId | where isnotnull(groupId)
+| rex field=dn ".*\[(?&lt;interface&gt;.*)\]"
+| lookup local=true 363636-topsystem.csv deviceId OUTPUT name as hostname role
+| eventstats values(descr) as description by pod,node,interface,deviceId
+| stats latest(*) as * by pod, node, interface, deviceId
+| table pod, node, hostname, role, adminSt, interface, description, operSt,operStQual,lastLinkStChg,usage
+| search NOT (adminSt::up AND operSt::up)
+| search NOT (adminSt::down AND operSt::down)</query>
+          <earliest>$global_time.earliest$</earliest>
+          <latest>$global_time.latest$</latest>
+        </search>
+        <option name="drilldown">cell</option>
+        <option name="refresh.display">progressbar</option>
+        <drilldown>
+          <set token="free_ports_interface_details">true</set>
+          <set token="DeviceID">$row.deviceId$</set>
+        </drilldown>
+      </table>
+    </panel>
+  </row>
+</form>
